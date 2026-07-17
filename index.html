@@ -33,6 +33,7 @@
         radial-gradient(circle at 85% 80%, rgba(224, 89, 42, 0.10), transparent 40%),
         var(--cream);
       color: var(--brown-dark);
+      min-height: 100vh;
       min-height: 100dvh;
       display: flex;
       flex-direction: column;
@@ -357,11 +358,18 @@
       if (noIsGone) return;
       attempts++;
 
-      // A partir da primeira fuga, o botão vira position:fixed e pula pela tela
+      // O .screen tem transform (animação fadeUp), e position:fixed dentro de um
+      // ancestral com transform se ancora nele em vez da viewport — o botão fugia
+      // para fora da tela. Reparentar para o body garante coordenadas da viewport.
+      if (btnNo.parentElement !== document.body) document.body.appendChild(btnNo);
+
+      // offsetWidth/offsetHeight = tamanho de layout SEM o scale(), que encolhe
+      // o visual para dentro desse box — clamp conservador, nunca sai da tela
       const pad = 12;
-      const rect = btnNo.getBoundingClientRect();
-      const maxX = window.innerWidth - rect.width - pad;
-      const maxY = window.innerHeight - rect.height - pad - 60; // evita o rodapé
+      const w = btnNo.offsetWidth;
+      const h = btnNo.offsetHeight;
+      const maxX = window.innerWidth - w - pad;
+      const maxY = window.innerHeight - h - pad - 20; // margem p/ barra do iPhone
       const x = pad + Math.random() * Math.max(1, maxX - pad);
       const y = pad + Math.random() * Math.max(1, maxY - pad);
 
@@ -401,6 +409,19 @@
     });
 
     btnYes.addEventListener("click", accept);
+
+    // A barra de URL do celular recolhe/expande e muda o innerHeight —
+    // puxa o botão de volta se a tela encolher e ele ficar de fora
+    window.addEventListener("resize", () => {
+      if (btnNo.style.position !== "fixed" || btnNo.style.display === "none") return;
+      const pad = 12;
+      const maxX = window.innerWidth - btnNo.offsetWidth - pad;
+      const maxY = window.innerHeight - btnNo.offsetHeight - pad - 20;
+      const x = Math.min(parseFloat(btnNo.style.left) || pad, maxX);
+      const y = Math.min(parseFloat(btnNo.style.top) || pad, maxY);
+      btnNo.style.left = Math.max(pad, x) + "px";
+      btnNo.style.top = Math.max(pad, y) + "px";
+    });
 
     /* ---------- Tela 3: comemoração ---------- */
     const WHATS_NUMBER = "5511949493024";
