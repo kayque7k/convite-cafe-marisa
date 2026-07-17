@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Um convite para você ☕</title>
-  <meta name="description" content="Marisa, tem um documento muito importante esperando por você aqui…" />
+  <meta name="description" content="Tem um documento muito importante esperando por você aqui…" />
   <meta property="og:title" content="Um convite para você ☕" />
-  <meta property="og:description" content="Marisa, tem um documento muito importante esperando por você aqui… Abra com cuidado." />
+  <meta property="og:description" content="Tem um documento muito importante esperando por você aqui… Abra com cuidado." />
   <meta property="og:type" content="website" />
   <meta name="theme-color" content="#4b2e1e" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>" />
@@ -238,6 +238,36 @@
       opacity: 0.7;
     }
 
+    /* ---------- Gerador de convites ---------- */
+    .field { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 6px; }
+    .field > span { font-size: 0.85rem; font-weight: 700; color: var(--brown); }
+    .field em { font-weight: 400; opacity: 0.75; }
+    .field input {
+      font-family: inherit;
+      font-size: 1rem;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 2px solid rgba(92, 58, 36, 0.3);
+      background: var(--paper);
+      color: var(--brown-dark);
+      outline: none;
+      width: 100%;
+      transition: border-color 0.2s ease;
+    }
+    .field input:focus { border-color: var(--caramel-dark); }
+    .linkbox {
+      width: 100%;
+      background: var(--paper);
+      border: 2px dashed var(--caramel-dark);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 0.85rem;
+      word-break: break-all;
+      color: var(--brown);
+      text-align: left;
+      font-variant-ligatures: none;
+    }
+
     canvas#confetti {
       position: fixed; inset: 0;
       width: 100vw; height: 100vh;
@@ -252,8 +282,35 @@
 </head>
 <body>
 
+  <!-- TELA 0: Gerador de convites (aparece só sem ?nome= na URL) -->
+  <section class="screen" id="screen-generator">
+    <div class="big-emoji" aria-hidden="true">☕</div>
+    <div class="doc">
+      <span class="stamp">TOP SECRET</span>
+      <h1>Central de Convites ☕</h1>
+      <p class="sub" style="margin-top:10px;">
+        Fábrica oficial de convites irrecusáveis.<br>
+        <em style="font-size:0.85em;">Taxa de sucesso: 100% — o botão "Não" foge sozinho.</em>
+      </p>
+    </div>
+    <label class="field">
+      <span>Nome dela</span>
+      <input id="gen-nome" type="text" placeholder="Ana Clara" autocomplete="off" />
+    </label>
+    <label class="field">
+      <span>Local e hora <em>(opcional — revelado só depois do "Sim")</em></span>
+      <input id="gen-quando" type="text" placeholder="sábado às 15h no Café Central" autocomplete="off" />
+    </label>
+    <div class="linkbox" id="gen-link" hidden></div>
+    <div class="btn-row" style="min-height:auto;">
+      <button class="btn-primary" id="gen-copy">Copiar link 🔗</button>
+      <button class="btn-yes" id="gen-test" style="animation:none;">Testar ▶</button>
+    </div>
+    <p class="quip" id="gen-msg" style="min-height:1.4em;"></p>
+  </section>
+
   <!-- TELA 1: Intimação -->
-  <section class="screen active" id="screen-intro">
+  <section class="screen" id="screen-intro">
     <div class="cup-wrap" aria-hidden="true">
       <span class="steam"></span><span class="steam"></span><span class="steam"></span>
       <div class="cup"></div>
@@ -275,7 +332,7 @@
   <!-- TELA 2: A pergunta -->
   <section class="screen" id="screen-question">
     <div class="big-emoji" aria-hidden="true">☕</div>
-    <h2>Marisa Silva,<br>aceita tomar um café comigo?</h2>
+    <h2 id="question-title">Ei, você,<br>aceita tomar um café comigo?</h2>
     <p class="sub">Pense com carinho. Ou nem pense, só aceite. 😌</p>
     <div class="btn-row" id="btn-row">
       <button class="btn-yes" id="btn-yes">Sim ☕</button>
@@ -292,9 +349,10 @@
     <div class="doc">
       <h1 style="font-size:1.1rem;">Ata oficial da decisão</h1>
       <p class="sub" style="margin-top:10px;">
-        Fica registrado que <strong>Marisa Silva</strong> aceitou o café
+        Fica registrado que <strong id="ata-nome"></strong> aceitou o café
         <span id="attempts-note"></span> e que o botão "Não" segue foragido, sendo procurado pelas autoridades. 🚔
       </p>
+      <p class="sub" id="ata-quando" style="margin-top:12px; display:none;"></p>
     </div>
     <a class="btn-whats" id="btn-whats" href="#" target="_blank" rel="noopener">Confirmar no WhatsApp 💬</a>
     <p class="sub" style="font-size:0.9rem;">— Kayque</p>
@@ -315,24 +373,94 @@
       window.scrollTo(0, 0);
     }
 
+    /* ---------- Parâmetros da URL ----------
+       ?nome=Ana-Clara            -> "Ana Clara" (hífen vira espaço, iniciais maiúsculas)
+       &quando=sabado-as-15h      -> "sabado as 15h" (opcional, revelado após o Sim) */
+    const params = new URLSearchParams(location.search);
+    const NOME = (params.get("nome") || "")
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\S+/g, (w) => w.charAt(0).toLocaleUpperCase("pt-BR") + w.slice(1));
+    const QUANDO = (params.get("quando") || "").replace(/-/g, " ").replace(/\s+/g, " ").trim();
+
     /* ---------- Tela 1: efeito de digitação ---------- */
-    const introText = "Destinatária: Marisa Silva 📬";
+    const introText = `Destinatária: ${NOME} 📬`;
     const typeline = $("typeline");
     let ti = 0;
     function typeNext() {
       if (ti <= introText.length) {
-        typeline.innerHTML = introText.slice(0, ti) + '<span class="cursor"></span>';
+        typeline.textContent = introText.slice(0, ti);
+        typeline.insertAdjacentHTML("beforeend", '<span class="cursor"></span>');
         ti++;
         setTimeout(typeNext, 65);
       } else {
-        typeline.innerHTML = introText;
+        typeline.textContent = introText;
         $("intro-detail").style.opacity = 1;
         $("btn-open").style.opacity = 1;
       }
     }
-    setTimeout(typeNext, 600);
+
+    if (NOME) {
+      // Modo convite: personaliza os textos (sempre via textContent — nome vem da URL)
+      const title = $("question-title");
+      title.textContent = "";
+      title.append(`${NOME},`, document.createElement("br"), "aceita tomar um café comigo?");
+      $("ata-nome").textContent = NOME;
+      showScreen("screen-intro");
+      setTimeout(typeNext, 600);
+    } else {
+      // Modo gerador: sem nome na URL, mostra a Central de Convites
+      showScreen("screen-generator");
+    }
 
     $("btn-open").addEventListener("click", () => showScreen("screen-question"));
+
+    /* ---------- Gerador de convites ---------- */
+    const genNome = $("gen-nome");
+    const genQuando = $("gen-quando");
+    const genLink = $("gen-link");
+    const genMsg = $("gen-msg");
+
+    function buildLink() {
+      const n = genNome.value.trim().replace(/\s+/g, "-");
+      if (!n) return "";
+      const q = genQuando.value.trim().replace(/\s+/g, "-");
+      const base = location.origin.startsWith("http")
+        ? location.origin + location.pathname
+        : location.href.split("?")[0];
+      return base + "?nome=" + n + (q ? "&quando=" + q : "");
+    }
+    function refreshLink() {
+      const link = buildLink();
+      genLink.hidden = !link;
+      genLink.textContent = link;
+      genMsg.textContent = "";
+    }
+    genNome.addEventListener("input", refreshLink);
+    genQuando.addEventListener("input", refreshLink);
+
+    $("gen-copy").addEventListener("click", async () => {
+      const link = buildLink();
+      if (!link) { genMsg.textContent = "Preciso do nome dela, né? 😅"; return; }
+      try {
+        await navigator.clipboard.writeText(link);
+        genMsg.textContent = "Link copiado! Agora é só enviar e aguardar o inevitável. 😏";
+      } catch {
+        // Fallback: seleciona o texto do linkbox para copiar manualmente
+        const range = document.createRange();
+        range.selectNodeContents(genLink);
+        const sel = getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        genMsg.textContent = "Copie o link selecionado acima. 👆";
+      }
+    });
+    $("gen-test").addEventListener("click", () => {
+      const link = buildLink();
+      if (!link) { genMsg.textContent = "Preciso do nome dela, né? 😅"; return; }
+      window.open(link, "_blank");
+    });
 
     /* ---------- Tela 2: o botão Não que foge ---------- */
     const btnNo = $("btn-no");
@@ -396,6 +524,9 @@
         btnNo.classList.remove("btn-no");
         btnNo.classList.add("btn-yes");
         quip.textContent = "O botão Não se rendeu. Agora só tem uma saída. 😏";
+        // O texto novo alarga o botão — puxa de volta se estourar a borda
+        btnNo.style.left = Math.max(pad, Math.min(parseFloat(btnNo.style.left) || pad, window.innerWidth - btnNo.offsetWidth - pad)) + "px";
+        btnNo.style.top = Math.max(pad, Math.min(parseFloat(btnNo.style.top) || pad, window.innerHeight - btnNo.offsetHeight - pad - 20)) + "px";
       }
     }
 
@@ -431,9 +562,20 @@
         : "de primeira, sem nem tentar fugir (nota 10)";
       $("attempts-note").textContent = note;
 
-      const msg = attempts > 0
-        ? `Oi Kayque! Aceito o café ☕😄 Você venceu: tentei dizer não ${attempts} vez(es) e o botão fugiu de mim 😂`
-        : "Oi Kayque! Aceito o café ☕😄 E nem tentei fugir, viu?";
+      // Surpresa: local e hora só aparecem aqui, depois do Sim
+      if (QUANDO) {
+        const ataQuando = $("ata-quando");
+        ataQuando.textContent = "";
+        const strong = document.createElement("strong");
+        strong.textContent = QUANDO;
+        ataQuando.append("📍 Fica a intimada convocada a comparecer: ", strong, ". O não comparecimento será punido com outro convite. ☕");
+        ataQuando.style.display = "block";
+      }
+
+      let msg = attempts > 0
+        ? `Oi Kayque! Aqui é a ${NOME} — aceito o café ☕😄 Você venceu: tentei dizer não ${attempts} vez(es) e o botão fugiu de mim 😂`
+        : `Oi Kayque! Aqui é a ${NOME} — aceito o café ☕😄 E nem tentei fugir, viu?`;
+      if (QUANDO) msg += ` Confirmadíssimo: ${QUANDO}. 📍`;
       $("btn-whats").href = `https://wa.me/${WHATS_NUMBER}?text=${encodeURIComponent(msg)}`;
 
       btnNo.style.display = "none";
